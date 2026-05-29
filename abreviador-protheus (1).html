@@ -1,0 +1,683 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Abreviador de Nota · Samtronic</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --navy:     #003366;
+    --navy-mid: #004080;
+    --navy-lt:  #e8eef6;
+    --orange:   #e8500a;
+    --orange-lt:#fff0ea;
+    --bg:       #f0f3f8;
+    --surface:  #ffffff;
+    --border:   #d0dae8;
+    --text:     #1a2540;
+    --muted:    #6b7a99;
+    --ok:       #1a7a3c;
+    --ok-bg:    #e6f4ec;
+    --err:      #c0392b;
+    --err-bg:   #fdecea;
+    --radius:   6px;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Inter', sans-serif;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+  }
+
+  /* ── HEADER BAR ── */
+  .topbar {
+    width: 100%;
+    max-width: 680px;
+    background: var(--navy);
+    border-radius: 8px 8px 0 0;
+    padding: 14px 24px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .brand {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .brand-logo {
+    background: var(--orange);
+    color: #fff;
+    font-weight: 700;
+    font-size: 13px;
+    letter-spacing: 0.06em;
+    padding: 4px 10px;
+    border-radius: 4px;
+  }
+
+  .brand-title {
+    color: #fff;
+    font-size: 14px;
+    font-weight: 500;
+    letter-spacing: 0.01em;
+  }
+
+  .limit-pill {
+    background: rgba(255,255,255,0.12);
+    color: rgba(255,255,255,0.75);
+    font-size: 11px;
+    font-weight: 500;
+    padding: 3px 10px;
+    border-radius: 20px;
+    border: 1px solid rgba(255,255,255,0.2);
+    letter-spacing: 0.04em;
+  }
+
+  /* ── CARD ── */
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-top: none;
+    border-radius: 0 0 8px 8px;
+    width: 100%;
+    max-width: 680px;
+    padding: 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+    box-shadow: 0 4px 16px rgba(0,51,102,0.08);
+  }
+
+  /* ── FIELDS ── */
+  .field-label {
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--navy);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 6px;
+  }
+
+  .field-label .hint {
+    font-size: 11px;
+    font-weight: 400;
+    text-transform: none;
+    letter-spacing: 0;
+    color: var(--muted);
+  }
+
+  .field-num {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 18px;
+    height: 18px;
+    background: var(--navy);
+    color: #fff;
+    border-radius: 50%;
+    font-size: 10px;
+    font-weight: 700;
+    flex-shrink: 0;
+  }
+
+  textarea {
+    width: 100%;
+    background: #fafbfd;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    color: var(--text);
+    font-family: 'Inter', sans-serif;
+    font-size: 13px;
+    line-height: 1.65;
+    padding: 11px 13px;
+    resize: vertical;
+    min-height: 100px;
+    transition: border-color 0.15s, box-shadow 0.15s;
+    outline: none;
+  }
+
+  textarea:focus {
+    border-color: var(--navy-mid);
+    box-shadow: 0 0 0 3px rgba(0,64,128,0.1);
+  }
+
+  textarea::placeholder { color: #aab4c8; }
+
+  #extra { min-height: 72px; }
+
+  .char-row {
+    display: flex;
+    justify-content: flex-end;
+    margin-top: 4px;
+  }
+
+  .char-count {
+    font-size: 11px;
+    color: var(--muted);
+    font-variant-numeric: tabular-nums;
+  }
+  .char-count.ok   { color: var(--ok); }
+  .char-count.over { color: var(--err); font-weight: 600; }
+
+  /* ── DIVIDER ── */
+  .divider {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    color: var(--orange);
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+  .divider::before, .divider::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: var(--border);
+  }
+
+  /* ── BUTTON ── */
+  .btn {
+    width: 100%;
+    padding: 13px;
+    background: var(--navy);
+    color: #fff;
+    border: none;
+    border-radius: var(--radius);
+    font-family: 'Inter', sans-serif;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    letter-spacing: 0.02em;
+    transition: background 0.15s, transform 0.1s;
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+  }
+
+  .btn:hover:not(:disabled) { background: var(--navy-mid); }
+  .btn:active:not(:disabled) { transform: scale(0.99); }
+  .btn:disabled { opacity: 0.45; cursor: not-allowed; }
+
+  .btn-icon { font-size: 16px; }
+
+  .spinner {
+    display: none;
+    width: 16px; height: 16px;
+    border: 2px solid rgba(255,255,255,0.3);
+    border-top-color: #fff;
+    border-radius: 50%;
+    animation: spin 0.7s linear infinite;
+  }
+  .btn.loading .spinner { display: block; }
+  .btn.loading .btn-icon { display: none; }
+
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* ── RESULT ── */
+  .result-box {
+    display: none;
+    background: var(--navy-lt);
+    border: 1px solid #b8cde0;
+    border-left: 4px solid var(--navy);
+    border-radius: var(--radius);
+    padding: 14px;
+  }
+  .result-box.visible { display: block; }
+
+  .result-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 10px;
+  }
+
+  .result-title {
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--navy);
+  }
+
+  .result-actions { display: flex; gap: 8px; align-items: center; }
+
+  .result-count {
+    font-size: 11px;
+    font-weight: 600;
+    padding: 2px 9px;
+    border-radius: 20px;
+  }
+  .result-count.ok   { background: var(--ok-bg);  color: var(--ok);  border: 1px solid #a3d4b5; }
+  .result-count.over { background: var(--err-bg); color: var(--err); border: 1px solid #f0b8b3; }
+
+  .copy-btn {
+    background: var(--navy);
+    border: none;
+    color: #fff;
+    font-family: 'Inter', sans-serif;
+    font-size: 11px;
+    font-weight: 600;
+    padding: 4px 12px;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: background 0.15s;
+    letter-spacing: 0.03em;
+  }
+  .copy-btn:hover { background: var(--navy-mid); }
+  .copy-btn.copied { background: var(--ok); }
+
+  .result-text {
+    font-size: 13px;
+    line-height: 1.65;
+    color: var(--text);
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+
+  /* ── ERROR ── */
+  .error-msg {
+    display: none;
+    background: var(--err-bg);
+    border: 1px solid #f0b8b3;
+    border-left: 4px solid var(--err);
+    border-radius: var(--radius);
+    padding: 10px 14px;
+    color: var(--err);
+    font-size: 13px;
+  }
+  .error-msg.visible { display: block; }
+
+  /* ── FOOTER ── */
+  .footer {
+    margin-top: 4px;
+    text-align: center;
+    font-size: 11px;
+    color: var(--muted);
+    letter-spacing: 0.03em;
+  }
+
+  /* ── MODAL OVERLAY ── */
+  .modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 30, 70, 0.55);
+    backdrop-filter: blur(3px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 100;
+    padding: 24px;
+    animation: fadeIn 0.2s ease;
+  }
+
+  .modal-overlay.hidden {
+    display: none;
+  }
+
+  @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+
+  .modal {
+    background: #fff;
+    border-radius: 10px;
+    width: 100%;
+    max-width: 520px;
+    overflow: hidden;
+    box-shadow: 0 20px 60px rgba(0,30,70,0.3);
+    animation: slideUp 0.25s ease;
+  }
+
+  @keyframes slideUp {
+    from { transform: translateY(16px); opacity: 0; }
+    to   { transform: translateY(0);    opacity: 1; }
+  }
+
+  .modal-header {
+    background: var(--navy);
+    padding: 18px 22px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .modal-header-icon {
+    background: var(--orange);
+    color: #fff;
+    width: 34px;
+    height: 34px;
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 17px;
+    flex-shrink: 0;
+  }
+
+  .modal-header-text h2 {
+    color: #fff;
+    font-size: 15px;
+    font-weight: 700;
+  }
+  .modal-header-text p {
+    color: rgba(255,255,255,0.65);
+    font-size: 12px;
+    margin-top: 2px;
+  }
+
+  .modal-body {
+    padding: 22px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+
+  .step {
+    display: flex;
+    gap: 12px;
+    align-items: flex-start;
+  }
+
+  .step-num {
+    background: var(--navy);
+    color: #fff;
+    font-size: 12px;
+    font-weight: 700;
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    margin-top: 1px;
+  }
+
+  .step-content strong {
+    display: block;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--navy);
+    margin-bottom: 2px;
+  }
+
+  .step-content span {
+    font-size: 13px;
+    color: var(--muted);
+    line-height: 1.5;
+  }
+
+  .modal-tip {
+    background: var(--orange-lt);
+    border: 1px solid #f5c8b0;
+    border-left: 4px solid var(--orange);
+    border-radius: var(--radius);
+    padding: 10px 13px;
+    font-size: 12px;
+    color: #7a3010;
+    line-height: 1.5;
+  }
+
+  .modal-tip strong { color: var(--orange); }
+
+  .modal-footer {
+    padding: 16px 22px;
+    border-top: 1px solid var(--border);
+    display: flex;
+    justify-content: flex-end;
+  }
+
+  .btn-start {
+    background: var(--orange);
+    color: #fff;
+    border: none;
+    border-radius: var(--radius);
+    font-family: 'Inter', sans-serif;
+    font-size: 14px;
+    font-weight: 700;
+    padding: 10px 28px;
+    cursor: pointer;
+    letter-spacing: 0.02em;
+    transition: background 0.15s, transform 0.1s;
+  }
+  .btn-start:hover { background: #c94008; }
+  .btn-start:active { transform: scale(0.98); }
+</style>
+</head>
+<body>
+
+<!-- ── MODAL DE ORIENTAÇÕES ── -->
+<div class="modal-overlay" id="modalOverlay">
+  <div class="modal">
+    <div class="modal-header">
+      <div class="modal-header-icon">📋</div>
+      <div class="modal-header-text">
+        <h2>Abreviador de Nota · Protheus</h2>
+        <p>Ferramenta interna Samtronic — Como utilizar</p>
+      </div>
+    </div>
+    <div class="modal-body">
+
+      <div class="step">
+        <div class="step-num">1</div>
+        <div class="step-content">
+          <strong>Cole o texto atual da nota</strong>
+          <span>No primeiro campo, cole exatamente o que já aparece no campo de nota do Protheus.</span>
+        </div>
+      </div>
+
+      <div class="step">
+        <div class="step-num">2</div>
+        <div class="step-content">
+          <strong>Adicione as informações faltando</strong>
+          <span>No segundo campo, cole qualquer informação que precisa ser incluída mas ainda não está na nota.</span>
+        </div>
+      </div>
+
+      <div class="step">
+        <div class="step-num">3</div>
+        <div class="step-content">
+          <strong>Clique em "Combinar e abreviar"</strong>
+          <span>O sistema vai unir tudo e abreviar automaticamente para caber no limite de <strong>250 caracteres</strong>, preservando as informações essenciais.</span>
+        </div>
+      </div>
+
+      <div class="step">
+        <div class="step-num">4</div>
+        <div class="step-content">
+          <strong>Copie e cole no Protheus</strong>
+          <span>Use o botão <strong>Copiar</strong> no resultado e cole diretamente no campo de nota.</span>
+        </div>
+      </div>
+
+      <div class="modal-tip">
+        <strong>Dica:</strong> Se precisar só abreviar sem adicionar nada novo, deixe o segundo campo em branco e clique em abreviar normalmente. Você também pode usar <strong>Ctrl + Enter</strong> para acionar.
+      </div>
+
+    </div>
+    <div class="modal-footer">
+      <button class="btn-start" onclick="closeModal()">Entendido, vamos começar →</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── TOPBAR ── -->
+<div class="topbar">
+  <div class="brand">
+    <span class="brand-logo">SAMTRONIC</span>
+    <span class="brand-title">Abreviador de Nota · Protheus</span>
+  </div>
+  <span class="limit-pill">Limite: 250 caracteres</span>
+</div>
+
+<!-- ── CARD ── -->
+<div class="card">
+
+  <div>
+    <div class="field-label">
+      <span class="field-num">1</span>
+      Texto atual da nota
+      <span class="hint">— o que já está no campo</span>
+    </div>
+    <textarea id="input" placeholder="Cole aqui o texto que já está na nota do Protheus..."></textarea>
+    <div class="char-row">
+      <span class="char-count" id="inputCount">0 caracteres</span>
+    </div>
+  </div>
+
+  <div class="divider">+ informações que estão faltando</div>
+
+  <div>
+    <div class="field-label">
+      <span class="field-num">2</span>
+      Informações faltando
+      <span class="hint">— o que precisa ser incluído</span>
+    </div>
+    <textarea id="extra" placeholder="Cole aqui o que precisa ser adicionado..."></textarea>
+  </div>
+
+  <button class="btn" id="btn" onclick="abbreviate()">
+    <span class="btn-icon">⚡</span>
+    <span id="btnLabel">Combinar e abreviar para 250 caracteres</span>
+    <span class="spinner"></span>
+  </button>
+
+  <div class="error-msg" id="error"></div>
+
+  <div class="result-box" id="resultBox">
+    <div class="result-header">
+      <span class="result-title">✅ Resultado</span>
+      <div class="result-actions">
+        <span class="result-count" id="resultCount"></span>
+        <button class="copy-btn" id="copyBtn" onclick="copyResult()">Copiar</button>
+      </div>
+    </div>
+    <div class="result-text" id="resultText"></div>
+  </div>
+
+  <div class="footer">
+    Ferramenta interna Samtronic · Powered by Claude AI
+  </div>
+
+</div>
+
+<script>
+  const input     = document.getElementById('input');
+  const inputCount= document.getElementById('inputCount');
+  const btn       = document.getElementById('btn');
+  const btnLabel  = document.getElementById('btnLabel');
+  const resultBox = document.getElementById('resultBox');
+  const resultText= document.getElementById('resultText');
+  const resultCount=document.getElementById('resultCount');
+  const errorEl   = document.getElementById('error');
+  const copyBtn   = document.getElementById('copyBtn');
+
+  function closeModal() {
+    document.getElementById('modalOverlay').classList.add('hidden');
+  }
+
+  input.addEventListener('input', () => {
+    const len = input.value.length;
+    inputCount.textContent = `${len} caracteres`;
+    inputCount.className = 'char-count ' + (len > 250 ? 'over' : len > 0 ? 'ok' : '');
+  });
+
+  async function abbreviate() {
+    const text  = input.value.trim();
+    const extra = document.getElementById('extra').value.trim();
+    if (!text && !extra) return;
+
+    btn.disabled = true;
+    btn.classList.add('loading');
+    btnLabel.textContent = 'Processando...';
+    errorEl.classList.remove('visible');
+    resultBox.classList.remove('visible');
+
+    const userPrompt = extra
+      ? `Texto atual da nota:\n${text}\n\nInformações que precisam ser incluídas:\n${extra}\n\nCombine tudo e abrevie para no máximo 250 caracteres.`
+      : `Abrevie este texto para no máximo 250 caracteres:\n\n${text}`;
+
+    try {
+      const response = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model: "claude-sonnet-4-20250514",
+          max_tokens: 1000,
+          system: `Você é um especialista em abreviação de textos para notas fiscais e sistemas ERP brasileiros (Protheus/TOTVS).
+Sua tarefa é combinar o texto existente com as informações adicionais (se houver) e abreviar tudo para NO MÁXIMO 250 caracteres, mantendo todas as informações essenciais.
+
+Regras de abreviação:
+- EMPENHO → EMP
+- CONTRATO → CONTR
+- Hospital → abrevie pelo nome/sigla conhecida (ex: Hospital Universitario Pedro Ernesto → HUPE)
+- Endereço → suprima a palavra ou use End.
+- Boulevard → Blvd
+- Almoxarifado → Almox.
+- Horários: use formato compacto (08-12h/13-15h)
+- CEP: manter no formato XXXXX-XXX
+- Telefones: manter se couber, suprimir se necessário
+- Separe blocos com " | "
+- NUNCA ultrapassar 250 caracteres
+- Não adicione explicações, retorne SOMENTE o texto abreviado`,
+          messages: [{ role: "user", content: userPrompt }]
+        })
+      });
+
+      const data = await response.json();
+      if (data.error) throw new Error(data.error.message);
+
+      const result = data.content?.[0]?.text?.trim() || '';
+      if (!result) throw new Error('Resposta vazia da API.');
+
+      resultText.textContent = result;
+      const rLen = result.length;
+      resultCount.textContent = `${rLen}/250`;
+      resultCount.className = 'result-count ' + (rLen <= 250 ? 'ok' : 'over');
+      resultBox.classList.add('visible');
+      copyBtn.textContent = 'Copiar';
+      copyBtn.classList.remove('copied');
+
+    } catch (err) {
+      errorEl.textContent = 'Erro: ' + err.message;
+      errorEl.classList.add('visible');
+    } finally {
+      btn.disabled = false;
+      btn.classList.remove('loading');
+      btnLabel.textContent = 'Combinar e abreviar para 250 caracteres';
+    }
+  }
+
+  function copyResult() {
+    navigator.clipboard.writeText(resultText.textContent).then(() => {
+      copyBtn.textContent = 'Copiado ✓';
+      copyBtn.classList.add('copied');
+      setTimeout(() => {
+        copyBtn.textContent = 'Copiar';
+        copyBtn.classList.remove('copied');
+      }, 2000);
+    });
+  }
+
+  document.addEventListener('keydown', e => {
+    if (e.ctrlKey && e.key === 'Enter') abbreviate();
+  });
+</script>
+</body>
+</html>
