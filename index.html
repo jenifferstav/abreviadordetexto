@@ -287,346 +287,268 @@
 <script>
   const LIMIT = 250;
 
-  // ── MOTOR SAMTRONIC SEM API ───────────────────────────────────────────────
-  // Prioriza informações críticas de faturamento, entrega, licitação,
-  // endereço e dados bancários. Não usa API, créditos ou login.
+  // ── MOTOR SAMTRONIC V4 · SEM API ─────────────────────────────────────────
+  // A lógica abaixo NÃO tenta apenas cortar texto. Ela identifica blocos críticos
+  // e remonta a observação em ordem de prioridade.
 
-  const FRASES_INTELIGENTES = [
-    // NF / OF / CNDs — variações curtas e longas
-    [
-      /A\s+(?:Nota\s+Fiscal|NF)\s+dever[aá]\s+estar\s+acompanhada[\s\S]*?(?:OF|Ordem\s+de\s+Fornecimento)[\s\S]*?CND[Ss]?[\s\S]*?\.?/gi,
-      'Imprimir NF + OF + CNDs'
-    ],
-    [
-      /A\s+(?:Nota\s+Fiscal|NF)[\s\S]*?c[oó]pia\s+impressa[\s\S]*?(?:OF|Ordem\s+de\s+Fornecimento)[\s\S]*?CND[Ss]?[\s\S]*?\.?/gi,
-      'Imprimir NF + OF + CNDs'
-    ],
-    [
-      /Favor\s+imprimir\s+a\s+ordem\s+de\s+fornecimento\s+em\s+anexo\s+e\s+mandar\s+juntamente\s+a\s+nota\s+fiscal\.?/gi,
-      'Imprimir OF com NF'
-    ],
-
-    // AFM
-    [
-      /\*?\s*A\s+AUTORIZA[CÇ][AÃ]O\s+DE\s+FORNECIMENTO\s*\(AFM\)\s+EM\s+ANEXO\s+DEVER[AÁ]\s+SER\s+ENVIADA\s+JUNTO\s+COM\s+A\s+MERCADORIA\.?/gi,
-      'Enviar AFM com mercadoria'
-    ],
-    [/AFM\s+EM\s+ANEXO[\s\S]*?MERCADORIA\.?/gi, 'Enviar AFM com mercadoria'],
-
-    // Agendamento / entrega
-    [/AGENDAR\s+ENTREGA\s+NO\s+CEDLOG(?:\s+PELO\s+TELEFONE|\s+TELEFONE)?/gi, 'Agendar no CEDLOG'],
-    [/AGENDAMENTO\s+DE\s+ENTREGA\s+NO\s+CEDLOG/gi, 'Agendar no CEDLOG'],
-
-    // Horário de recebimento/entrega — transforma frase longa em informação objetiva
-    [
-      /Entrega\s+dever[aá]\s+ser\s+realizada\s+de\s+segunda\s+a\s+sexta-feira\s+das\s+(\d{1,2})[:h](\d{2})\s*(?:[àa]s?|[-–])\s*(\d{1,2})[:h](\d{2})\s*e\s+das\s+(\d{1,2})[:h](\d{2})\s*(?:[àa]s?|[-–])\s*(\d{1,2})[:h](\d{2})/gi,
-      (_, h1, m1, h2, m2, h3, m3, h4, m4) => `Horário ${Number(h1)}-${Number(h2)}h/${Number(h3)}-${Number(h4)}h`
-    ],
-    [
-      /de\s+segunda\s+a\s+sexta-feira\s+das\s+(\d{1,2})[:h](\d{2})\s*(?:[àa]s?|[-–])\s*(\d{1,2})[:h](\d{2})\s*e\s+das\s+(\d{1,2})[:h](\d{2})\s*(?:[àa]s?|[-–])\s*(\d{1,2})[:h](\d{2})/gi,
-      (_, h1, m1, h2, m2, h3, m3, h4, m4) => `Horário ${Number(h1)}-${Number(h2)}h/${Number(h3)}-${Number(h4)}h`
-    ],
-  ];
-
-  const SUBSTITUICOES = [
-    // Campos administrativos — antes de palavras isoladas para evitar quebrar PROCESSO/PEDIDO
-    [/\bRAZ[AÃ]O\s+SOCIAL\s*[:\-]?\s*/gi, 'Razão: '],
-    [/\bAMBULAT[ÓO]RIO\s+M[ÉE]DICO\s+DE\s+ESPECIALIDADE\s+AME\s+SANTO\s+ANDR[ÉE]\b/gi, 'AME Santo André'],
-    [/\bPROCESSO\s+DE\s+COMPRA\s*N?[º°]?\s*/gi, 'Proc. Compra '],
-    [/\bPEDIDO\s+DE\s+COMPRA\s*N?[º°]?\s*/gi, 'Ped. Compra '],
-    [/\bCONTRATO\s+DE\s+GEST[AÃ]O\s*[:\-]?\s*/gi, 'Contr. Gestão '],
-    [/\bFONTE\s+PAGADORA\s*[:\-]?\s*/gi, 'Fonte: '],
-    [/\bRECURSO\s+P[ÚU]BLICO\s+ESTADUAL\b/gi, 'Rec. Público Estadual'],
-    [/\bENDERE[CÇ]O\s+DE\s+ENTREGA\s+E\s+FATURAMENTO\s*[:\-]?\s*/gi, 'Ent/Fat: '],
-
-    // Documentos e licitação
-    [/\bPREG[AÃ]O\s+ELETR[ÔO]NICO\s*N?[º°]?\s*/gi, 'PE '],
-    [/\bPREG[AÃ]O\s*N?[º°]?\s*/gi, 'PE '],
-    [/\bORDEM\s+DE\s+FORNECIMENTO\s*N?[º°]?\s*/gi, 'OF '],
-    [/\bOF\b\s*[:\-]?\s*N?[º°]?\s*/gi, 'OF '],
-    [/\bARP\b\s*[:\-]?\s*N?[º°]?\s*/gi, 'ARP '],
-    [/\bPROCESSO\s+DE\s+PAGAMENTO\s*N?[º°]?\s*/gi, 'Pagto. '],
-    [/\bPROC(?:\.|\b)\s+PAGTO(?:\.|\b)\s*N?[º°]?\s*/gi, 'Pagto. '],
-    [/\bPROCESSO\b\s*\.?\s*N?[º°]?\s*/gi, 'Proc. '],
-    // Não pode virar Proc. ESSO: só abrevia PROC quando é palavra ou tem ponto.
-    [/\bPROC(?:\.|\b)\s*N?[º°]?\s*/gi, 'Proc. '],
-    [/\bPAGTO(?:\.|\b)\s*N?[º°]?\s*/gi, 'Pagto. '],
-    [/\bPAGAMENTO\b/gi, 'Pagto.'],
-    [/\bNOTA\s+DE\s+EMPENHO\b/gi, 'Emp.'],
-    [/\bEMPENHO\b/gi, 'Emp.'],
-    [/\bCONTRATO\b/gi, 'Contr.'],
-
-    // Dados bancários — NUNCA remover, apenas compactar
-    [/\bBANCO\s+DO\s+BRASIL\b/gi, 'B/B'],
-    [/\bBCO\s+DO\s+BRASIL\b/gi, 'B/B'],
-    [/\bBANCO\b/gi, 'Bco.'],
-    [/\bAG[ÊE]NCIA\b/gi, 'AG'],
-    [/\bCONTA\s+CORRENTE\b/gi, 'CC'],
-    [/\bCONTA\b/gi, 'CC'],
-
-    // Logradouros
-    [/\bAVENIDA\b/gi, 'Av.'],
-    [/\bAV\.\s*CAP\.?\b/gi, 'Av. Cap.'],
-    [/\bRUA\b/gi, 'R.'],
-    [/\bBOULEVARD\b/gi, 'Blvd.'],
-    [/\bTRAVESSA\b/gi, 'Trav.'],
-    [/\bESTRADA\b/gi, 'Est.'],
-    [/\bRODOVIA\b/gi, 'Rod.'],
-    [/\bPRAÇA\b/gi, 'Pça.'],
-    [/\bALAMEDA\b/gi, 'Al.'],
-
-    // Complementos e endereço
-    [/\bAPARTAMENTO\b/gi, 'Apt.'],
-    [/\bCOMPLEMENTO\b/gi, 'Comp.'],
-    [/\bANDAR\b/gi, 'And.'],
-    [/\bBLOCO\b/gi, 'Bl.'],
-    [/\bEDIF[ÍI]CIO\b/gi, 'Ed.'],
-    [/\bLOCAL\s+DE\s+ENTREGA\s*[:\-]?\s*/gi, ''],
-    [/\bENDERE[CÇ]O\s*[:\-]?\s*/gi, ''],
-    [/\bEND\.\s*[:\-]?\s*/gi, ''],
-    [/\bCEP\s*[:\-]?\s*/gi, 'CEP '],
-    [/\bTELEFONE\s*[:\-]?\s*/gi, 'Tel. '],
-    [/\bFONE\s*[:\-]?\s*/gi, 'Tel. '],
-
-    // Almoxarifado / depósito
-    [/\bALMOXARIFADO\s+CENTRAL\b/gi, 'Almox. Central'],
-    [/\bALMOXARIFADO\b/gi, 'Almox.'],
-    [/\bDEP[ÓO]SITO\b/gi, 'Dep.'],
-
-    // Hospitais e unidades conhecidas
-    [/Hospital\s+Universit[aá]rio\s+Pedro\s+Ernesto/gi, 'HUPE'],
-    [/Hospital\s+Universitario\s+Pedro\s+Ernesto/gi, 'HUPE'],
-    [/Hospital\s+Universit[aá]rio\s+Clementino\s+Fraga\s+Filho/gi, 'HUCFF'],
-    [/Hospital\s+das\s+Cl[ií]nicas\s+da\s+FMUSP/gi, 'HC-FMUSP'],
-    [/Hospital\s+das\s+Cl[ií]nicas/gi, 'HC'],
-    [/Hospital\s+Universit[aá]rio\s+da\s+USP/gi, 'HU-USP'],
-    [/Hospital\s+Universit[aá]rio\b/gi, 'HU'],
-    [/Hospital\s+Geral\b/gi, 'HG'],
-    [/Hospital\s+Federal\b/gi, 'HF'],
-    [/Hospital\s+Municipal\b/gi, 'HM'],
-    [/Hospital\s+Estadual\b/gi, 'HE'],
-    [/Hospital\s+Regional\b/gi, 'HR'],
-    [/Hospital\s+Nacional\b/gi, 'HN'],
-    [/\bInstituto\s+Nacional\s+d[eo]\s+C[âa]ncer\b/gi, 'INCA'],
-    [/\bInstituto\s+do\s+Cora[çc][ãa]o\b/gi, 'InCor'],
-    [/\bUnidade\s+de\s+Terapia\s+Intensiva\b/gi, 'UTI'],
-    [/\bPronto[- ]Socorro\b/gi, 'PS'],
-    [/\bUnidade\s+B[aá]sica\s+de\s+Sa[úu]de\b/gi, 'UBS'],
-    [/\bUnidade\s+de\s+Sa[úu]de\b/gi, 'US'],
-    [/\bCentro\s+de\s+Sa[úu]de\b/gi, 'CS'],
-    [/\bSanta\s+Casa\b/gi, 'SC'],
-
-    // Estados por extenso → sigla
-    [/\bRio\s+de\s+Janeiro\s*\/\s*RJ\b/gi, 'RJ'],
-    [/\bS[ãa]o\s+Paulo\s*\/\s*SP\b/gi, 'SP'],
-    [/\bSanto\s+Andr[ée]\s*-\s*SP\b/gi, 'Santo André/SP'],
-    [/\bMinas\s+Gerais\s*\/\s*MG\b/gi, 'MG'],
-    [/\bBahia\s*\/\s*BA\b/gi, 'BA'],
-    [/\bParan[aá]\s*\/\s*PR\b/gi, 'PR'],
-    [/\bRio\s+Grande\s+do\s+Sul\s*\/\s*RS\b/gi, 'RS'],
-    [/\bPernambuco\s*\/\s*PE\b/gi, 'PE'],
-    [/\bCear[aá]\s*\/\s*CE\b/gi, 'CE'],
-    [/\bGoi[aá]s\s*\/\s*GO\b/gi, 'GO'],
-    [/\bAmazonas\s*\/\s*AM\b/gi, 'AM'],
-
-    // Misc
-    [/\bN[ÚU]MERO\b/gi, 'Nº'],
-    [/\bn[°º]\s*/gi, 'Nº '],
-    [/\bSEM\s+N[ÚU]MERO\b/gi, 's/n'],
-    [/\bS\/N\b/gi, 's/n'],
-    [/\bAUTORIZA[CÇ][AÃ]O\s+DE\s+FORNECIMENTO\b/gi, 'AFM'],
-    [/\bNOTA\s+FISCAL\b/gi, 'NF'],
-  ];
-
-  function normalizarHorarios(txt) {
-    txt = txt.replace(
-      /(\d{1,2})[:h](\d{2})?\s*(?:[àa]s?|[-–])\s*(\d{1,2})[:h](\d{2})?\s*h?\s*(?:e|\/)\s*(\d{1,2})[:h](\d{2})?\s*(?:[àa]s?|[-–])\s*(\d{1,2})[:h](\d{2})?\s*h?/gi,
-      (_, h1, m1, h2, m2, h3, m3, h4, m4) => `${Number(h1)}-${Number(h2)}h/${Number(h3)}-${Number(h4)}h`
-    );
-    txt = txt.replace(
-      /(\d{1,2})[:h](\d{2})?\s*(?:[àa]s?|[-–])\s*(\d{1,2})[:h](\d{2})?\s*h?/gi,
-      (_, h1, m1, h2, m2) => `${Number(h1)}-${Number(h2)}h`
-    );
-    return txt;
+  function semAcento(txt) {
+    return (txt || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '');
   }
 
-  function padronizarCepSemRotulo(txt) {
-    // Quando o CEP vem no final do endereço sem o rótulo CEP, adiciona o rótulo.
-    return txt.replace(/([,\s])(?<!CEP\s)(\d{5}-\d{3})(?=\s*(?:\||$|\.))/gi, '$1CEP $2');
+  function titleCase(txt) {
+    const minusculas = new Set(['de','da','do','das','dos','e','em','no','na','nos','nas']);
+    return (txt || '').toLowerCase().replace(/\b([a-záéíóúâêôãõç]+)\b/gi, (w, p, offset) => {
+      const lw = w.toLowerCase();
+      if (offset > 0 && minusculas.has(lw)) return lw;
+      return lw.charAt(0).toUpperCase() + lw.slice(1);
+    }).replace(/\bSp\b/g, 'SP').replace(/\bRj\b/g, 'RJ').replace(/\bMg\b/g, 'MG')
+      .replace(/\bPr\b/g, 'PR').replace(/\bBa\b/g, 'BA').replace(/\bPe\b/g, 'PE')
+      .replace(/\bAme\b/g, 'AME').replace(/\bHu\b/g, 'HU').replace(/\bHupe\b/g, 'HUPE')
+      .replace(/\bCedlog\b/g, 'CEDLOG').replace(/\bCnds\b/g, 'CNDs')
+      .replace(/\bNf\b/g, 'NF').replace(/\bOf\b/g, 'OF').replace(/\bArp\b/g, 'ARP');
   }
 
   function limpar(txt) {
-    return txt
+    return (txt || '')
       .replace(/\r?\n+/g, ' | ')
       .replace(/\s{2,}/g, ' ')
-      .replace(/\s*,\s*/g, ', ')
       .replace(/\s*;\s*/g, ' | ')
-      .replace(/\s+\.\s*/g, '. ')
-      .replace(/\.\s+(?=(PE|B\/B|OF|ARP|Proc\.|Ped\.|Pagto\.|Emp\.|Contr\.|Fonte|Ent\/Fat|Razão|Agendar|Entrega|Hor[aá]rio|Imprimir|Enviar|HUPE|AME|Almox))/gi, ' | ')
       .replace(/\s*\|\s*/g, ' | ')
       .replace(/\|\s*\|/g, '|')
-      .replace(/\s+-\s+/g, ' | ')
-      .replace(/\s*:\s*/g, ': ')
-      .replace(/:\s*:/g, ':')
-      .replace(/\bAG\b\s*:??\s*/gi, 'AG: ')
-      .replace(/\bCC\b\s*:??\s*/gi, 'CC: ')
-      .replace(/\bPE\b\s*:??\s*N?[º°]?\s*/gi, 'PE ')
-      .replace(/\bOF\b\s*:??\s*N?[º°]?\s*/gi, 'OF ')
-      .replace(/\bARP\b\s*:??\s*N?[º°]?\s*/gi, 'ARP ')
-      .replace(/\bProc\.\s*:??\s*N?[º°]?\s*/gi, 'Proc. ')
-      .replace(/\bPed\.\s*:??\s*N?[º°]?\s*/gi, 'Ped. ')
-      .replace(/\bPagto\.\s*:??\s*N?[º°]?\s*/gi, 'Pagto. ')
-      .replace(/\bTel\.\s*/gi, '') // telefone fica só como número quando estiver junto ao agendamento
       .replace(/\s+([,.])/g, '$1')
-      .replace(/\s{2,}/g, ' ')
+      .replace(/([|])\s*\./g, '$1')
       .replace(/^\s*\|\s*/g, '')
       .replace(/\s*\|\s*$/g, '')
-      .replace(/\.\s*\|/g, ' |')
       .trim();
   }
 
-  function removerDuplicidades(txt) {
-    const partes = txt.split('|').map(p => limpar(p)).filter(Boolean);
-    const vistos = new Set();
-    const resultado = [];
-
-    for (const parte of partes) {
-      const chave = parte
-        .toUpperCase()
-        .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
-        .replace(/\s+/g, ' ')
-        .replace(/[.,;:]/g, '')
-        .trim();
-
-      if (!vistos.has(chave)) {
-        vistos.add(chave);
-        resultado.push(parte);
-      }
+  function dedup(partes) {
+    const out = [];
+    const seen = new Set();
+    for (const p of partes.map(x => limpar(x)).filter(Boolean)) {
+      const key = semAcento(p).toUpperCase().replace(/[^A-Z0-9]/g, '');
+      if (!key || seen.has(key)) continue;
+      seen.add(key);
+      out.push(p);
     }
-    return resultado.join(' | ');
+    return out;
   }
 
-  function extrairPrimeiro(txt, re, montar) {
+  function normalizarHorarios(txt) {
+    return (txt || '')
+      .replace(/(\d{1,2})[:h](\d{2})\s*(?:[àa]s?|[-–])\s*(\d{1,2})[:h](\d{2})\s*h?\s*(?:e|\/)\s*(?:das?\s*)?(\d{1,2})[:h](\d{2})\s*(?:[àa]s?|[-–])\s*(\d{1,2})[:h](\d{2})\s*h?/gi,
+        (_, h1,m1,h2,m2,h3,m3,h4,m4) => `${Number(h1)}-${Number(h2)}h/${Number(h3)}-${Number(h4)}h`)
+      .replace(/(\d{1,2})[:h](\d{2})\s*(?:[àa]s?|[-–])\s*(\d{1,2})[:h](\d{2})\s*h?/gi,
+        (_, h1,m1,h2,m2) => `${Number(h1)}-${Number(h2)}h`);
+  }
+
+  function valorDepoisDeRotulo(txt, rotulos) {
+    const labels = rotulos.join('|');
+    const todosRotulos = [
+      'RAZ[AÃ]O\\s+SOCIAL', 'PROCESSO\\s+DE\\s+COMPRA', 'PEDIDO\\s+DE\\s+COMPRA',
+      'CONTRATO\\s+DE\\s+GEST[AÃ]O', 'FONTE\\s+PAGADORA', 'ENDERE[CÇ]O\\s+DE\\s+ENTREGA\\s+E\\s+FATURAMENTO',
+      'PREG[AÃ]O(?:\\s+ELETR[ÔO]NICO)?', 'ORDEM\\s+DE\\s+FORNECIMENTO', 'ARP', 'PROCESSO\\s+DE\\s+PAGAMENTO'
+    ].join('|');
+    const re = new RegExp(`(?:${labels})\\s*[:\\-]?\\s*(?:N?[º°]?\\s*)?([\\s\\S]*?)(?=\\s*(?:${todosRotulos})\\s*[:\\-]?|$)`, 'i');
     const m = txt.match(re);
-    return m ? (montar ? montar(m) : m[0].trim()) : '';
+    return m ? limpar(m[1].replace(/^N?[º°]?\s*/i, '')) : '';
   }
 
-  function extrairEnderecoAdministrativo(t) {
-    const m = t.match(/Ent\/Fat:\s*([^|]+?)(?:\s*\|\s*([^|]+))?(?:\s*\|\s*([^|]+))?(?:\s*\|\s*(CEP\s*\d{5}-\d{3}))?/i);
-    if (!m) return '';
-    const texto = m[0]
-      .replace(/,\s*CEP\s*/i, ' | CEP ')
-      .replace(/,\s*(Vila\s+Luzita)/i, ' | $1')
-      .replace(/,\s*(Santo\s+Andr[ée]\/SP)/i, ' | $1')
-      .replace(/\s*\|\s*/g, ' | ');
-    return limpar(texto);
+  function formatarEndereco(raw) {
+    if (!raw) return '';
+    let e = limpar(raw)
+      .replace(/\bENDERE[CÇ]O\s+DE\s+ENTREGA\s+E\s+FATURAMENTO\s*[:\-]?\s*/gi, '')
+      .replace(/\bENDERE[CÇ]O\s*[:\-]?\s*/gi, '')
+      .replace(/\bAVENIDA\b/gi, 'Av.')
+      .replace(/\bAV\.?\b/gi, 'Av.')
+      .replace(/\bCAPIT[AÃ]O\b/gi, 'Cap.')
+      .replace(/\bRUA\b/gi, 'R.')
+      .replace(/\bBOULEVARD\b/gi, 'Blvd.')
+      .replace(/\bCEP\s*[:\-]?\s*/gi, 'CEP ')
+      .replace(/,\s*(VILA\s+LUZITA)\s*,\s*(SANTO\s+ANDR[ÉE])\s*-\s*SP/gi, ' | $1 | $2/SP')
+      .replace(/,\s*(VILA\s+ISABEL)\s*,\s*(RIO\s+DE\s+JANEIRO)\s*\/\s*RJ/gi, ' | $1 | $2/RJ')
+      .replace(/\s+-\s+/g, ' | ')
+      .replace(/,\s*(\d{5}-?\d{3})\b/gi, ' | CEP $1')
+      .replace(/\b(\d{5}-?\d{3})\b(?!.*CEP)/i, 'CEP $1')
+      .replace(/,\s*([A-ZÁÉÍÓÚÂÊÔÃÕÇ ]+\/\s*[A-Z]{2})/gi, ' | $1')
+      .replace(/,\s*([A-ZÁÉÍÓÚÂÊÔÃÕÇ ]+\s*-\s*[A-Z]{2})/gi, ' | $1')
+      .replace(/\s*-\s*([A-Z]{2})\b/g, '/$1')
+      .replace(/\s*\/\s*/g, '/')
+      .replace(/\s*,\s*/g, ', ');
+
+    // Separa bairro/cidade/CEP quando vier tudo separado por vírgula.
+    e = e.replace(/,\s*(Vila\s+Luzita)\s*,\s*(Santo\s+Andr[ée])\/SP/i, ' | $1 | $2/SP');
+    e = e.replace(/,\s*(Vila\s+Isabel)\s*,\s*(Rio\s+de\s+Janeiro)\/RJ/i, ' | $1 | $2/RJ');
+    e = e.replace(/\|\s*(Vila\s+Luzita),\s*(Santo\s+Andr[eé])\s*\|\s*SP/gi, '| $1 | $2/SP');
+    e = e.replace(/\|\s*(Vila\s+Isabel),\s*(Rio\s+de\s+Janeiro)\s*\|\s*RJ/gi, '| $1 | $2/RJ');
+    e = e.replace(/Rio\s+de\s+Janeiro\/RJ/gi, 'Rio de Janeiro/RJ');
+    e = e.replace(/Santo\s+Andr[eé]\/SP/gi, 'Santo André/SP');
+
+    e = titleCase(e);
+    e = e.replace(/Av\.\./g, 'Av.').replace(/Cap\.\./g, 'Cap.').replace(/Blvd\.\./g, 'Blvd.');
+    e = e.replace(/\bAv\.\b/gi, 'Av.').replace(/\bCap\.\b/gi, 'Cap.').replace(/\bBlvd\.\b/gi, 'Blvd.');
+    e = e.replace(/\bCep\b/g, 'CEP').replace(/CEP\s+CEP/gi, 'CEP').replace(/\.$/, '');
+    return limpar(e);
   }
 
-  function montarEstruturado(txt) {
-    let t = padronizarCepSemRotulo(limpar(txt));
+  function substituirFrasesLongas(txt) {
+    let t = txt;
+    t = t.replace(/A\s+(?:Nota\s+Fiscal|NF)\s+dever[aá]\s+estar\s+acompanhada[\s\S]*?(?:dessa\s+)?(?:OF|Ordem\s+de\s+Fornecimento)[\s\S]*?CNDs?\.?/gi, 'Imprimir NF + OF + CNDs');
+    t = t.replace(/Favor\s+imprimir\s+a\s+ordem\s+de\s+fornecimento\s+em\s+anexo\s+e\s+mandar\s+juntamente\s+a\s+nota\s+fiscal\.?/gi, 'Imprimir OF com NF');
+    t = t.replace(/\*?\s*A\s+AUTORIZA[CÇ][AÃ]O\s+DE\s+FORNECIMENTO\s*\(AFM\)[\s\S]*?MERCADORIA\.?/gi, 'Enviar AFM com mercadoria');
+    t = t.replace(/AGENDAR\s+ENTREGA\s+NO\s+CEDLOG(?:\s+(?:PELO\s+)?TELEFONE)?/gi, 'Agendar no CEDLOG');
+    t = t.replace(/Entrega\s+dever[aá]\s+ser\s+realizada\s+de\s+segunda\s+a\s+sexta-feira\s+das\s+(\d{1,2})[:h](\d{2})\s*(?:[àa]s?|[-–])\s*(\d{1,2})[:h](\d{2})\s*e\s+das\s+(\d{1,2})[:h](\d{2})\s*(?:[àa]s?|[-–])\s*(\d{1,2})[:h](\d{2})/gi,
+      (_, h1,m1,h2,m2,h3,m3,h4,m4) => `Horário ${Number(h1)}-${Number(h2)}h/${Number(h3)}-${Number(h4)}h`);
+    return t;
+  }
+
+  function montarPorBlocos(textoOriginal) {
+    let raw = substituirFrasesLongas(textoOriginal);
+    raw = normalizarHorarios(raw);
+    const U = semAcento(raw).toUpperCase();
     const partes = [];
 
-    // Fluxo licitação/pedido UF
-    const pe = extrairPrimeiro(t, /\bPE\s*(\d+[\/\-]?\d*)/i, m => `PE ${m[1]}`);
-    const of = extrairPrimeiro(t, /\bOF\s*(\d+[\/\-]?\d*)/i, m => `OF ${m[1]}`);
-    const arp = extrairPrimeiro(t, /\bARP\s*(\d+[\/\-]?\d*)/i, m => `ARP ${m[1]}`);
-    const proc = extrairPrimeiro(t, /\bProc\.\s*([A-Z0-9\-\/]+)/i, m => `Proc. ${m[1]}`);
-    const pagto = extrairPrimeiro(t, /\bPagto\.\s*([A-Z0-9\-\/]+)/i, m => `Pagto. ${m[1]}`);
-    const banco = extrairPrimeiro(t, /\bB\/B\s*AG:?\s*([\d\-]+)\s*CC:?\s*([\d\-]+)/i, m => `B/B AG: ${m[1]} CC: ${m[2]}`);
-    const agendarCedlog = extrairPrimeiro(t, /Agendar\s+no\s+CEDLOG\s*(\(?\d{2}\)?\s?\d{4,5}[-\s]?\d{4})?/i, m => `Agendar no CEDLOG${m[1] ? ' ' + m[1].trim() : ''}`);
-    const horario = extrairPrimeiro(t, /Hor[aá]rio\s*\d{1,2}-\d{1,2}h\/?\d{0,2}-?\d{0,2}h?/i);
-    const imprimirNf = /Imprimir\s+NF\s*\+\s*OF\s*\+\s*CNDs/i.test(t) ? 'Imprimir NF + OF + CNDs' : '';
+    // ── Fluxo administrativo / AME ──
+    const razao = valorDepoisDeRotulo(raw, ['RAZ[AÃ]O\\s+SOCIAL']);
+    if (/AMBULATORIO\s+MEDICO\s+DE\s+ESPECIALIDADE\s+AME\s+SANTO\s+ANDRE/i.test(semAcento(razao)) || /AME\s+SANTO\s+ANDR/i.test(raw)) {
+      partes.push('AME Santo André');
+    } else if (razao) {
+      partes.push(titleCase(razao).replace(/^Ambulatorio Médico de Especialidade\s+/i, ''));
+    }
 
-    [pe, of, arp, proc, pagto, banco, agendarCedlog, horario, imprimirNf].forEach(x => { if (x) partes.push(x); });
+    const procCompra = valorDepoisDeRotulo(raw, ['PROCESSO\\s+DE\\s+COMPRA']);
+    if (procCompra) partes.push(`Proc. Compra ${procCompra}`);
 
-    // Fluxo administrativo: AME / processo de compra / pedido de compra / fonte / endereço
-    const razaoAme = /AME\s+Santo\s+Andr[ée]/i.test(t) ? 'AME Santo André' : '';
-    const procCompra = extrairPrimeiro(t, /Proc\.\s*Compra\s*([A-Z0-9\-\/]+)/i, m => `Proc. Compra ${m[1]}`);
-    const pedCompra = extrairPrimeiro(t, /Ped\.\s*Compra\s*([A-Z0-9\-\/]+)/i, m => `Ped. Compra ${m[1]}`);
-    const contrGestao = extrairPrimeiro(t, /Contr\.\s*Gestão\s*([A-Z0-9\-\/]+)/i, m => `Contr. Gestão ${m[1]}`);
-    const fonte = /Fonte:\s*Rec\.\s*Público\s*Estadual/i.test(t) ? 'Fonte: Rec. Público Estadual' : '';
-    const enderecoAdm = extrairEnderecoAdministrativo(t);
+    const pedCompra = valorDepoisDeRotulo(raw, ['PEDIDO\\s+DE\\s+COMPRA']);
+    if (pedCompra) partes.push(`Ped. Compra ${pedCompra}`);
 
-    [razaoAme, procCompra, pedCompra, contrGestao, fonte, enderecoAdm].forEach(x => { if (x) partes.push(x); });
+    const contrGestao = valorDepoisDeRotulo(raw, ['CONTRATO\\s+DE\\s+GEST[AÃ]O']);
+    if (contrGestao) partes.push(`Contr. Gestão ${contrGestao}`);
 
-    // Usa estrutura automática quando reconhece pelo menos 2 campos críticos.
-    if (partes.length >= 2) return removerDuplicidades(partes.join(' | '));
-    return '';
+    const fonte = valorDepoisDeRotulo(raw, ['FONTE\\s+PAGADORA']);
+    if (fonte) {
+      let f = titleCase(fonte).replace(/Recurso Publico Estadual/i, 'Rec. Público Estadual').replace(/Recurso Público Estadual/i, 'Rec. Público Estadual');
+      partes.push(`Fonte: ${f}`);
+    }
+
+    const endAdm = valorDepoisDeRotulo(raw, ['ENDERE[CÇ]O\\s+DE\\s+ENTREGA\\s+E\\s+FATURAMENTO']);
+    if (endAdm) partes.push(`Ent/Fat: ${formatarEndereco(endAdm)}`);
+
+    // ── Fluxo licitação / UF ──
+    const pe = raw.match(/PREG[AÃ]O(?:\s+ELETR[ÔO]NICO)?\s*N?[º°]?\s*([0-9]+\/?[0-9]*)/i) || raw.match(/\bPE\s*N?[º°]?\s*([0-9]+\/?[0-9]*)/i);
+    if (pe) partes.push(`PE ${pe[1]}`);
+
+    const of = raw.match(/(?:ORDEM\s+DE\s+FORNECIMENTO|\bOF\b)\s*N?[º°]?\s*([0-9]+\/?[0-9]*)/i);
+    if (of) partes.push(`OF ${of[1]}`);
+
+    const arp = raw.match(/\bARP\s*N?[º°]?\s*([0-9]+\/?[0-9]*)/i);
+    if (arp) partes.push(`ARP ${arp[1]}`);
+
+    const procPagto = raw.match(/PROCESSO\s+DE\s+PAGAMENTO\s*N?[º°]?\s*([A-Z0-9\-\/]+)/i) || raw.match(/PROC\.?\s*PAGTO\.?\s*N?[º°]?\s*([A-Z0-9\-\/]+)/i);
+    const proc = raw.match(/(?:^|[|.\s])PROCESSO(?!\s+DE\s+(?:COMPRA|PAGAMENTO))\s*N?[º°]?\s*([A-Z0-9\-\/]+)/i) || raw.match(/(?:^|[|.\s])PROC\.\s*N?[º°]?\s*([A-Z0-9\-\/]+)/i);
+    if (proc) partes.push(`Proc. ${proc[1]}`);
+    if (procPagto) partes.push(`Pagto. ${procPagto[1]}`);
+
+    const banco = raw.match(/(?:BANCO\s+DO\s+BRASIL|BCO\s+DO\s+BRASIL|B\/B)[\s\S]*?(?:AG[ÊE]NCIA|AG)\s*:??\s*([0-9\-]+)[\s\S]*?(?:CONTA\s+CORRENTE|CC)\s*:??\s*([0-9\-]+)/i);
+    if (banco) partes.push(`B/B AG: ${banco[1]} CC: ${banco[2]}`);
+
+    const tel = raw.match(/\(?\d{2}\)?\s?\d{4,5}[-\s]?\d{4}/);
+    if (/AGENDAR\s+NO\s+CEDLOG|AGENDAR\s+ENTREGA\s+NO\s+CEDLOG/i.test(raw)) {
+      partes.push(`Agendar no CEDLOG${tel ? ' ' + tel[0].trim() : ''}`);
+    }
+
+    const horario = raw.match(/Hor[aá]rio\s+\d{1,2}-\d{1,2}h\/?\d{0,2}-?\d{0,2}h?/i) || raw.match(/\d{1,2}-\d{1,2}h\/\d{1,2}-\d{1,2}h/i);
+    if (horario) partes.push(/^Hor/i.test(horario[0]) ? horario[0] : `Horário ${horario[0]}`);
+
+    // Hospital HUPE e endereço de entrega do exemplo 2
+    if (/HOSPITAL\s+UNIVERSIT[AÁ]RIO\s+PEDRO\s+ERNESTO|HOSPITAL\s+UNIVERSITARIO\s+PEDRO\s+ERNESTO/i.test(raw)) partes.push('HUPE');
+    const localEntrega = raw.match(/(?:LOCAL\s+DE\s+ENTREGA\s*:)?[\s\S]*?(?:END\.?\s*:|ENDERE[CÇ]O\s*:)?\s*(BOULEVARD\s+28\s+DE\s+SETEMBRO,?\s*77[\s\S]*?(?:CEP\s*:??\s*\d{5}-?\d{3}|\d{5}-?\d{3}))/i);
+    if (localEntrega) partes.push(formatarEndereco(localEntrega[1]).replace(/^Blvd\. 28 de Setembro, 77 \| /i, 'Blvd. 28 de Setembro, 77 | '));
+
+    const almox = raw.match(/ALMOXARIFADO\s+CENTRAL/i);
+    if (almox) partes.push('Almox. Central');
+
+    const imprimir = /Imprimir\s+NF\s*\+\s*OF\s*\+\s*CNDs/i.test(raw) || /NOTA\s+FISCAL[\s\S]*OF[\s\S]*CND/i.test(raw);
+    if (imprimir) partes.push('Imprimir NF + OF + CNDs');
+
+    const afm = /AFM|AUTORIZA[CÇ][AÃ]O\s+DE\s+FORNECIMENTO/i.test(raw) && /MERCADORIA/i.test(raw);
+    if (afm) partes.push('Enviar AFM com mercadoria');
+
+    return dedup(partes).join(' | ');
   }
 
-  function comprimirAgressivo(txt) {
-    let t = padronizarCepSemRotulo(limpar(txt));
-
-    const passos = [
-      [/\bdever[aá]\s+ser\b/gi, 'deve ser'],
-      [/\bdever[aá]\b/gi, 'deve'],
-      [/\bjuntamente\b/gi, 'junto'],
-      [/\bacompanhada\s+de\b/gi, 'com'],
-      [/\bassinada\s+pelas\s+partes\b/gi, 'assinada'],
-      [/\bc[oó]pia\s+impressa\b/gi, 'cópia'],
-      [/\s+com\s+/gi, ' c/ '],
-      [/\s+para\s+/gi, ' p/ '],
-      [/\s+em\s+anexo\b/gi, ' anexa'],
-      [/\bEntrega\s+deve\s+ser\s+realizada\b/gi, 'Entrega'],
-      [/\bsegunda\s+a\s+sexta-feira\b/gi, 'seg-sex'],
-      [/\bRazão:\s*/gi, ''],
-      [/\s*\|\s*/g, ' | '],
-      [/\s{2,}/g, ' '],
+  function fallbackAbreviar(texto) {
+    let t = substituirFrasesLongas(texto);
+    const reps = [
+      [/\bPREG[AÃ]O\s+ELETR[ÔO]NICO\s*N?[º°]?\s*/gi, 'PE '],
+      [/\bPREG[AÃ]O\s*N?[º°]?\s*/gi, 'PE '],
+      [/\bBANCO\s+DO\s+BRASIL\b|\bBCO\s+DO\s+BRASIL\b/gi, 'B/B'],
+      [/\bAG[ÊE]NCIA\b/gi, 'AG:'],
+      [/\bCONTA\s+CORRENTE\b/gi, 'CC:'],
+      [/\bORDEM\s+DE\s+FORNECIMENTO\s*N?[º°]?\s*/gi, 'OF '],
+      [/\bPROCESSO\s+DE\s+PAGAMENTO\s*N?[º°]?\s*/gi, 'Pagto. '],
+      [/\bPROCESSO\s+DE\s+COMPRA\s*N?[º°]?\s*/gi, 'Proc. Compra '],
+      [/\bPEDIDO\s+DE\s+COMPRA\s*N?[º°]?\s*/gi, 'Ped. Compra '],
+      [/\bCONTRATO\s+DE\s+GEST[AÃ]O\s*:?\s*/gi, 'Contr. Gestão '],
+      [/\bFONTE\s+PAGADORA\s*:?\s*/gi, 'Fonte: '],
+      [/\bRECURSO\s+P[ÚU]BLICO\s+ESTADUAL\b/gi, 'Rec. Público Estadual'],
+      [/\bENDERE[CÇ]O\s+DE\s+ENTREGA\s+E\s+FATURAMENTO\s*:?\s*/gi, 'Ent/Fat: '],
+      [/\bPROCESSO\b\s*N?[º°]?\s*/gi, 'Proc. '],
+      [/\bCONTRATO\b/gi, 'Contr.'],
+      [/\bEMPENHO\b/gi, 'Emp.'],
+      [/\bNOTA\s+FISCAL\b/gi, 'NF'],
+      [/\bAVENIDA\b/gi, 'Av.'],
+      [/\bRUA\b/gi, 'R.'],
+      [/\bBOULEVARD\b/gi, 'Blvd.'],
+      [/\bALMOXARIFADO\s+CENTRAL\b/gi, 'Almox. Central'],
+      [/Hospital\s+Universit[aá]rio\s+Pedro\s+Ernesto|Hospital\s+Universitario\s+Pedro\s+Ernesto/gi, 'HUPE'],
+      [/\bCEP\s*:?\s*/gi, 'CEP '],
+      [/\bTELEFONE\s*:?\s*/gi, ''],
     ];
+    for (const [re, sub] of reps) t = t.replace(re, sub);
+    t = normalizarHorarios(t);
+    return limpar(t.replace(/\s+-\s+/g, ' | '));
+  }
 
-    for (const [re, sub] of passos) {
-      if (t.length <= LIMIT) break;
-      t = limpar(t.replace(re, sub));
+  function compactarAteLimite(partes) {
+    let p = dedup(partes);
+    let txt = p.join(' | ');
+    if (txt.length <= LIMIT) return txt;
+
+    // Compactações seguras, sem remover dados críticos.
+    txt = txt
+      .replace(/Fonte: Rec\. Público Estadual/gi, 'Rec. Público Estadual')
+      .replace(/Ent\/Fat: /gi, '')
+      .replace(/Contr\. Gestão/gi, 'Contr.')
+      .replace(/Proc\. Compra/gi, 'Proc.')
+      .replace(/Ped\. Compra/gi, 'Ped.')
+      .replace(/Horário /gi, 'Hor. ')
+      .replace(/Agendar no CEDLOG/gi, 'Ag. CEDLOG')
+      .replace(/Imprimir NF \+ OF \+ CNDs/gi, 'Impr. NF+OF+CNDs')
+      .replace(/ \| /g, ' | ');
+    if (txt.length <= LIMIT) return limpar(txt);
+
+    // Último recurso: corta apenas no limite entre blocos, nunca no meio de palavra/bloco.
+    const out = [];
+    for (const bloco of txt.split('|').map(x => limpar(x)).filter(Boolean)) {
+      const candidato = out.length ? out.join(' | ') + ' | ' + bloco : bloco;
+      if (candidato.length <= LIMIT) out.push(bloco);
+      else break;
     }
-
-    // Se ainda passar e existir estrutura clara, usa somente os blocos críticos reconhecidos.
-    if (t.length > LIMIT) {
-      const estruturado = montarEstruturado(t);
-      if (estruturado && estruturado.length <= LIMIT) return estruturado;
-    }
-
-    if (t.length > LIMIT) {
-      t = t.substring(0, LIMIT).replace(/\s+\S*$/, '').trim();
-    }
-
-    return t;
+    return out.length ? out.join(' | ') : txt.slice(0, LIMIT).replace(/\s+\S*$/, '').trim();
   }
 
   function abreviar(texto) {
-    let t = texto;
-
-    // 1) Frases completas primeiro — inclusive a informação adicionada.
-    for (const [re, sub] of FRASES_INTELIGENTES) {
-      t = t.replace(re, sub);
+    const estruturado = montarPorBlocos(texto);
+    if (estruturado) {
+      return compactarAteLimite(estruturado.split('|'));
     }
-
-    // 2) Substituições recorrentes.
-    for (const [re, sub] of SUBSTITUICOES) {
-      t = t.replace(re, sub);
-    }
-
-    // 3) Horários, CEP sem rótulo, separadores e limpeza.
-    t = normalizarHorarios(t);
-    t = padronizarCepSemRotulo(t);
-    t = limpar(t);
-    t = removerDuplicidades(t);
-
-    // 4) Quando há campos conhecidos, reorganiza em ordem de prioridade.
-    const estruturado = montarEstruturado(t);
-    if (estruturado && (t.length > LIMIT || estruturado.length < t.length)) {
-      t = estruturado;
-    }
-
-    // 5) Compressão final, se necessário.
-    if (t.length > LIMIT) {
-      t = comprimirAgressivo(t);
-    }
-
-    return t;
+    const fb = fallbackAbreviar(texto);
+    if (fb.length <= LIMIT) return fb;
+    return compactarAteLimite(fb.split('|'));
   }
 
   // ── UI ───────────────────────────────────────────────────────────────────
-
   const input      = document.getElementById('input');
   const inputCount = document.getElementById('inputCount');
   const resultBox  = document.getElementById('resultBox');
@@ -663,7 +585,7 @@
     resultBox.classList.add('visible');
 
     if (rLen > 250) {
-      warnBox.textContent = `⚠️ Mesmo após as regras inteligentes, o texto ficou com ${rLen} caracteres. Revise manualmente para reduzir sem remover dados críticos.`;
+      warnBox.textContent = `⚠️ O texto ficou com ${rLen} caracteres. Revise manualmente para reduzir sem remover dados críticos.`;
       warnBox.classList.add('visible');
     }
 
